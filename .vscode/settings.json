@@ -1,0 +1,79 @@
+{
+  "actionButtons": {
+    "reloadButton": "♻️" /* Custom reload button text */,
+    "defaultColor": "#ff0034" /* Can also use string color names */,
+    "loadNpmCommands": false /* Disables automatic generation of actions for npm commands */,
+    "commands": [
+      {
+        "name": "🛑",
+        "singleInstance": true,
+        "tooltip": "Stop and remove all containers, volumes not be deleted",
+        "command": "cd src && make rm" /* Stop and remove all containers */
+      },
+      {
+        "name": "▶",
+        "singleInstance": true,
+        "tooltip": "Start containers",
+        "command": "cd src && make start"
+      },
+      {
+        "name": "🐞",
+        "tooltip": "Debug Odoo running in Docker",
+        "singleInstance": true,
+        "command": "cd src && make debug"
+      },
+      {
+        "name": "📃",
+        "tooltip": "Start Odoo Log visualization",
+        "singleInstance": true,
+        "command": "cd src && make log"
+      },
+      {
+        "name": "🐘",
+        "tooltip": "Start Postgresql Log visualization",
+        "singleInstance": true,
+        "command": "cd src && make logdb"
+      },
+      {
+        "name": "🔄",
+        "tooltip": "Update custom modules. Will ask wich modules you want to update",
+        "singleInstance": true,
+        "command": "cd src && make update-module"
+      },
+      {
+        "name": "🐍",
+        "tooltip": "Start Odoo Python Shell on running Docker environment",
+        "singleInstance": true,
+        "command": "cd src && make shell"
+      },
+      {
+        "name": "💬",
+        "tooltip": "Start bash terminal inside Odoo container",
+        "singleInstance": true,
+        "command": "cd src && make bash"
+      },
+      {
+        "name": "💬🐘",
+        "tooltip": "Start bash terminal inside Postgresql container",
+        "singleInstance": true,
+        "command": "cd src && make bashdb"
+      },
+      {
+        "name": "🔨",
+        "tooltip": "Rebuild Odoo image and start containers",
+        "singleInstance": true,
+        "command": "cd src && make rm && make build && make start"
+      }
+    ]
+  },
+  "python.defaultInterpreterPath": "/usr/bin/python3",
+  "python.languageServer": "Pylance",
+  "python.analysis.extraPaths": [
+    "./src/custom-addons",
+    "./src/external-addons",
+    "./src/external-modified",
+    "./src/enterprise",
+    "./src/python-env/dist-packages",
+    "./src/odoo-base"
+  ]
+}

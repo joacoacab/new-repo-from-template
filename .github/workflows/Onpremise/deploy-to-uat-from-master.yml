@@ -1,0 +1,73 @@
+name: Deploy to UAT Server from master branch
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'src/**'
+      
+jobs:
+  build:
+    name: "Build UAT artifact"
+    runs-on: Ubuntu-22.04
+    timeout-minutes: 8
+
+    steps:
+    # Show the branch name being deployed
+    - name: Show branch name
+      run: echo "******** Deploying from branch ${{ github.ref }} ********"
+    
+    # Checkout the branch entered by the user with submodules using a personal access token.
+    - name: Checkout
+    uses: actions/checkout@v4
+    with:
+      # Use the user's response for checkout.
+      submodules: true
+      # Use the personal access token from the Nybble organization to clone private submodules.
+      token: ${{ secrets.ODOO_ADDONS }}
+
+      # Use inject slug to be able to use environment variables in the workflow.
+    - name: Inject slug/short variables
+      uses: rlespinasse/github-slug-action@v4.x
+
+    # Create a ZIP file with the repository name and branch name
+    - name: Create UAT RELEASE ZIP file
+      id: create-zip
+      run: |
+        REPO_NAME=$(echo "${{ github.repository }}" | cut -d '/' -f 2)
+        BRANCH_NAME=$(echo "${{ github.ref }}" | cut -d '/' -f 3)
+        FILE_NAME="${REPO_NAME}_master.zip"
+        zip -r "${FILE_NAME}" src
+        echo "::set-output name=zip_file::${FILE_NAME}"
+
+    # Upload the zip file created in the previous step as an artifact using the Ubuntu runner in the same job
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: artifact-uat 
+        path: ${{ steps.create-zip.outputs.zip_file }}
+        retention-days: 1
+    
+  # Send .zip file created in the previous step to a DEV server
+  deploy:
+    name: "Deploy to uat server"
+    needs: build
+    runs-on: [self-hosted, uat]
+    timeout-minutes: 8
+    steps:
+      - name: Check reexecution
+        run: |
+          reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempt
+            if [[ $reexecution_attempt -gt 1 ]]; then
+              echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+              exit 1
+            fi
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: artifact-uat
+          path: ${{ secrets.UAT_DEPLOY_ZIP_PATH }}
+      - name: Deploy
+        run: |
+          sudo bash ${{ secrets.UAT_DEPLOY_SCRIPT_PATH }} "${{ github.ref }}"

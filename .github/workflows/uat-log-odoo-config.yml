@@ -1,0 +1,121 @@
+# Workflow to change timeout values on the server
+
+name: UAT - Log Configuration and Level for ODOO
+on:
+  # Trigger the workflow manually with the following input options
+  workflow_dispatch:
+    inputs:
+      log_level:
+        description: "Log Level"
+        type: choice
+        required: true
+        options:
+          - Debug
+          - Info
+          - Warning
+          - Error
+      log_handler:
+        description: "Log Handler"
+        type: choice
+        required: true
+        options:
+          - Custom
+          - Unset
+      log_db:
+        description: "Log Database"
+        type: choice
+        required: true
+        options:
+          - "True"
+          - "False"
+      log_db_level:
+        description: "Log Database Level"
+        type: choice
+        required: true
+        options:
+          - Debug
+          - Info
+          - Warning
+          - Error
+
+jobs:
+  # Check if the user running the workflow is authorized.
+  verify-user-permissions:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+    - name: Verify if the user is allowed to run this workflow
+      run: |
+        ALLOWED_USERS=${{ vars.ALLOWED_USERS }}
+        CURRENT_USER=$GITHUB_ACTOR
+        
+        if [[ ! $ALLOWED_USERS =~ (^|,)${CURRENT_USER}($|,) ]]; then
+          echo "ERROR - You are not allowed to run this workflow."
+          exit 1
+        fi
+        
+        echo "Permissions OK, running workflow..."
+        
+    - name: Verify Reexecution
+      run: |
+        reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+          if [[ $reexecution_attempt -gt 1 ]]; then
+            echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+            exit 1
+          fi
+
+  # Convert input options to numeric values
+  change-log-config:
+    needs: [verify-user-permissions]
+    runs-on: [self-hosted, dev_uat]
+    timeout-minutes: 5
+    steps:
+      - name: Verify Reexecution
+        run: |
+          reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+            if [[ $reexecution_attempt -gt 1 ]]; then
+              echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+              exit 1
+            fi
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Convert log_level to a numeric value
+        run: |
+          if [[ ${{ github.event.inputs.log_level }} == "Debug" ]]; then
+            echo "log_level=1" >> $GITHUB_ENV
+          elif [[ ${{ github.event.inputs.log_level }} == "Info" ]]; then
+            echo "log_level=2" >> $GITHUB_ENV
+          elif [[ ${{ github.event.inputs.log_level }} == "Warning" ]]; then
+            echo "log_level=3" >> $GITHUB_ENV
+          elif [[ ${{ github.event.inputs.log_level }} == "Error" ]]; then
+            echo "log_level=4" >> $GITHUB_ENV
+          fi
+      - name: Convert log_db_level to a numeric value
+        run: |
+          if [[ ${{ github.event.inputs.log_db_level }} == "Debug" ]]; then
+            echo "log_db_level=1" >> $GITHUB_ENV
+          elif [[ ${{ github.event.inputs.log_db_level }} == "Info" ]]; then
+            echo "log_db_level=2" >> $GITHUB_ENV
+          elif [[ ${{ github.event.inputs.log_db_level }} == "Warning" ]]; then
+            echo "log_db_level=3" >> $GITHUB_ENV
+          elif [[ ${{ github.event.inputs.log_db_level }} == "Error" ]]; then
+            echo "log_db_level=4" >> $GITHUB_ENV
+          fi
+      - name: Convert log_handler to a numeric value
+        run: |
+          if [[ ${{ github.event.inputs.log_handler }} == "Custom" ]]; then
+            echo "log_handler=1" >> $GITHUB_ENV
+          elif [[ ${{ github.event.inputs.log_handler }} == "Unset" ]]; then
+            echo "log_handler=0" >> $GITHUB_ENV
+          fi
+      - name: Convert log_db to a numeric value
+        run: |
+          if [[ ${{ github.event.inputs.log_db }} == "True" ]]; then
+            echo "log_db=1" >> $GITHUB_ENV
+          elif [[ ${{ github.event.inputs.log_db }} == "False" ]]; then
+            echo "log_db=0" >> $GITHUB_ENV
+          fi
+ 
+      - name: Execute Remote Script
+        run: |
+          sudo bash ${{ secrets.UAT_LOG_SCRIPT_PATH }} ${{ env.log_level }} ${{ env.log_handler }} ${{ env.log_db }} ${{ env.log_db_level }}

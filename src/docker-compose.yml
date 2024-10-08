@@ -1,0 +1,68 @@
+version: "3.5"
+
+networks:
+  odoo-local:
+volumes:
+  odoo-db-data:
+  odoo-data:
+  odoo-logs:
+  odoo-db-logs:
+
+services:
+  odoo:
+    container_name: ${PROJECT_NAME}-web
+    image: ${PROJECT_NAME}-web-local
+    environment:
+      - PGPASSWORD=odoo
+    depends_on:
+      - db
+    ports:
+      - "8069:8069"
+      - "8072:8072"
+    volumes:
+      - ./tmp:/mnt/tmp
+      - odoo-data:/var/lib/odoo
+      - ./config/odoo.conf:/etc/odoo/odoo.conf
+      - odoo-logs:/var/log/odoo
+      - ./custom-addons:/mnt/custom-addons
+      - ./external-addons:/mnt/external-addons
+      - ./external-modified:/mnt/external-modified
+    networks:
+      - odoo-local
+  db:
+    container_name: ${PROJECT_NAME}-db
+    image: postgres:13
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=odoo
+      - POSTGRES_USER=odoo
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - odoo-db-data:/var/lib/postgresql/data/pgdata
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf
+      - odoo-db-logs:/var/log/postgresql
+    ports:
+      - "5432:5432"
+    networks:
+      - odoo-local
+  mailhog:
+    container_name: ${PROJECT_NAME}-odoo-mail
+    image: mailhog/mailhog:latest
+    ports:
+      - 1025:1025
+      - 8025:8025
+    networks:
+      - odoo-local
+
+  pg_stat_statements:
+    container_name: ${PROJECT_NAME}-pg_stat_statements
+    image: capa0soluciones/pg_stats_statements_viewer:latest
+    depends_on:
+      - db
+    volumes:
+      - ./config/config.ini:/opt/pg_stat_statements/config/config.ini:ro
+    ports:
+      - 5000:5000
+    networks:
+      - odoo-local

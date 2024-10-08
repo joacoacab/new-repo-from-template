@@ -1,0 +1,57 @@
+# Workflow to set Odoo Service State in the UAT environment
+
+name: UAT - Odoo Service State
+on:
+  # Trigger the workflow manually with the following input options
+  workflow_dispatch:
+    inputs:
+      odoo_state:
+        description: "Set Odoo Service State"
+        type: choice
+        required: true
+        options:
+          - start
+          - stop
+          - restart
+
+jobs:
+  # Check if the user running the workflow is authorized and limit reexecution to one attempt
+  verify-user-permissions:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Verify if the user is allowed to run this workflow
+      run: |
+        ALLOWED_USERS=${{ vars.ALLOWED_USERS }}
+        CURRENT_USER=$GITHUB_ACTOR
+        
+        if [[ ! $ALLOWED_USERS =~ (^|,)${CURRENT_USER}($|,) ]]; then
+          echo "ERROR - You are not allowed to run this workflow."
+          exit 1
+        fi
+        
+        echo "Permissions OK, running workflow..."
+    - name: Verify Reexecution
+      run: |
+        reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+          if [[ $reexecution_attempt -gt 1 ]]; then
+            echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+            exit 1
+          fi
+
+  # Set Odoo Service State by executing a script on the UAT server
+  odoo-state:
+    needs: [verify-user-permissions]
+    runs-on: [self-hosted, dev_uat]
+    timeout-minutes: 4
+    steps:
+    - name: Verify Reexecution
+      run: |
+        reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+        if [[ $reexecution_attempt -gt 1 ]]; then
+          echo "Error: Reexecution detected. You need to create a new Workflow Dispatch!"
+          exit 1
+        fi
+  
+    - name: Execute Remote Script
+      run: |
+          sudo bash ${{ secrets.UAT_SERVICE_STATE_SCRIPT_PATH }} ${{ github.event.inputs.odoo_state }}

@@ -1,0 +1,85 @@
+name: "Master Branch: Check name | Pre-commit | SonarQube"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - master
+    paths:
+      - "src/**"
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    name: Check branch name
+    steps:
+    - name: Check branch name
+      run: |
+        if [[ ! "${{ github.head_ref }}" =~ ^(ams|release|hotfix).* ]]; then
+          echo "Invalid branch name. Branch names should start with 'ams', 'release', or 'hotfix'."
+          echo "Closing this pull request..."
+          gh pr close "${{ github.event.pull_request.number }}" --repo ${{ github.repository }}
+          exit 1
+        else
+          echo "Branch name check passed. The branch name starts correctly."
+        fi
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  pre-commit:
+    needs: check
+    name: Pre-commit
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Disabling shallow clone for pre-commit is recommended for improving relevancy of reporting.
+          fetch-depth: 0
+      - uses: actions/setup-python@v4
+      - name: Get python version
+        run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> $GITHUB_ENV
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit|${{ env.PY }}|${{ hashFiles('.pre-commit-config.yaml') }}  
+      - name: Install pre-commit
+        run: pip install pre-commit
+      - name: Run pre-commit
+        run: pre-commit run --show-diff-on-failure --color always --from-ref ${{ github.event.pull_request.base.sha }} --to-ref ${{ github.event.pull_request.head.sha }}
+
+  sonarqube:
+    needs: pre-commit
+    name: SonarQube
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # Disabling shallow clone is recommended for improving relevancy of reporting.
+          fetch-depth: 0
+
+      # Triggering SonarQube analysis as results of it are required by Quality Gate check.
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      # Check the Quality Gate status.
+      - name: SonarQube Quality Gate check
+        id: sonarqube-quality-gate-check
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }} #OPTIONAL
+
+      # Optionally you can use the output from the Quality Gate in another step.
+      # The possible outputs of the `quality-gate-status` variable are `PASSED`, `WARN` or `FAILED`.
+      - name: "Quality Gate Status"
+        run:
+          echo "The Quality Gate status is ${{
+          steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
+  
+

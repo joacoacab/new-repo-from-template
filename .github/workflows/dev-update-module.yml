@@ -1,0 +1,77 @@
+# Workflow to update modules in the DEV environment
+
+name: 'DEV - Update Modules'
+
+# Define the event that triggers this workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      modules:
+        description: 'Modules to update, separated by comma'
+        required: true
+      database:
+        description: 'Database to update'
+        required: true
+
+# Jobs to be executed in the workflow
+jobs:
+  # Check if the user running the workflow is authorized and limit the number of execution attempts to one.
+  verify-user-permissions:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+    - name: Verify if the user is allowed to run this workflow
+      run: |
+        ALLOWED_USERS=${{ vars.ALLOWED_USERS }}
+        CURRENT_USER=$GITHUB_ACTOR
+        
+        if [[ ! $ALLOWED_USERS =~ (^|,)${CURRENT_USER}($|,) ]]; then
+          echo "ERROR - You are not allowed to run this workflow."
+          exit 1
+        fi
+        
+        echo "Permissions OK, running workflow..."
+    - name: Verify Reexecution
+      run: |
+        reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+          if [[ $reexecution_attempt -gt 1 ]]; then
+            echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+            exit 1
+          fi
+
+  validate_inputs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: Validate Inputs
+      run: |
+        modules=${{  github.event.inputs.modules }}
+        database=${{  github.event.inputs.database }}
+
+        # Check if the values comply with the character restrictions
+        if [[ ! "$modules" =~ ^[a-z0-9,_]+$ ]]; then
+          echo "Error: The 'Modules to update, separated by comma' field contains invalid characters."
+          exit 1
+        fi
+
+        if [[ ! "$database" =~ ^[a-zA-Z0-9,_]+$ ]]; then
+          echo "Error: The 'Database to update' field contains invalid characters."
+          exit 1
+        fi
+
+  update-module:
+    needs: [verify-user-permissions, validate_inputs]
+    runs-on: [self-hosted, dev_uat]
+    timeout-minutes: 5
+    steps:
+    - name: Verify Reexecution
+      run: |
+        reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+          if [[ $reexecution_attempt -gt 1 ]]; then
+            echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+            exit 1
+          fi
+
+    - name: Execute Remote Script
+      run: |
+          sudo bash ${{ secrets.DEV_UPDATE_SCRIPT_PATH }} "${{ github.event.inputs.modules }}" "${{ github.event.inputs.database }}"

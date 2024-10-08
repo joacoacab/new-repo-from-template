@@ -1,0 +1,31 @@
+# ARCHIVOS DE CONFIGURACION PROTEGIDOS
+.editorconfig @capa0soluciones @joacoacab
+.env @capa0soluciones @joacoacab
+.eslintrc.yml @capa0soluciones @joacoacab
+.flake8 @capa0soluciones @joacoacab
+.github/workflows/ @capa0soluciones @joacoacab
+.gitignore @capa0soluciones @joacoacab
+.isort.cfg @capa0soluciones @joacoacab
+.pre-commit-config.yaml @capa0soluciones @joacoacab
+.prettierrc.yml @capa0soluciones @joacoacab
+.pylintrc @capa0soluciones @joacoacab
+.pylintrc-mandatory @capa0soluciones @joacoacab
+.vscode/ @capa0soluciones @joacoacab
+Dockerfile @capa0soluciones @joacoacab
+Dockerfile.base @capa0soluciones @joacoacab
+Makefile @capa0soluciones @joacoacab
+Makefile.1.gz @capa0soluciones @joacoacab
+README.md @capa0soluciones @joacoacab
+config/ @capa0soluciones @joacoacab
+docker-compose-debug.yml @capa0soluciones @joacoacab
+docker-compose.yml @capa0soluciones @joacoacab
+entrypoint.sh @capa0soluciones @joacoacab
+pyproject.toml @capa0soluciones @joacoacab
+restore.sh @capa0soluciones @joacoacab
+setup.sh @capa0soluciones @joacoacab
+sonar-project.properties @capa0soluciones @joacoacab
+test.txt @capa0soluciones @joacoacab
+wait-for-psql.py @capa0soluciones @joacoacab
+analyze_tests.py @capa0soluciones @joacoacab
+
+CODEOWNERS @capa0soluciones @pablobrown @maurram21 @joacoacab

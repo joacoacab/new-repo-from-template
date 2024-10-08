@@ -1,0 +1,115 @@
+name: DEV - Deploy to dev from feature branch
+# When the workflow is triggered manually, you can enter the name of the branch to deploy to.
+on:
+  workflow_dispatch:
+
+jobs:
+# Verify if the user running the workflow is authorized to do so.
+  verify-user-permissions:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Verify if the user is allowed to run this workflow
+      run: |
+        ALLOWED_USERS=${{ vars.ALLOWED_USERS }}
+        CURRENT_USER=$GITHUB_ACTOR
+        
+        if [[ ! $ALLOWED_USERS =~ (^|,)${CURRENT_USER}($|,) ]]; then
+          echo "ERROR - You are not allowed to run this workflow."
+          exit 1
+        fi
+        
+        echo "Permissions OK, running the workflow..."
+
+    - name: Check for reexecution
+      run: |
+        reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+          if [[ $reexecution_attempt -gt 1 ]]; then
+            echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+            exit 1
+          fi
+
+  package:
+    needs: [verify-user-permissions]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+
+    steps:
+
+    - name: Check for reexecution
+      run: |
+        reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+          if [[ $reexecution_attempt -gt 1 ]]; then
+            echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+            exit 1
+          fi
+      # Display the name of the branch being deployed from.
+    - name: Show branch name
+      run: echo "******** Deploying from branch ${{ github.ref }} ********"
+
+      # Checkout the branch entered by the user with submodules using a personal access token.
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+          # Use the user's response for checkout.
+          submodules: true
+          # Use the personal access token from the Nybble organization to clone private submodules.
+          token: ${{ secrets.ODOO_ADDONS }}
+
+      # Use inject slug to be able to use environment variables in the workflow.
+    - name: Inject slug/short variables
+      uses: rlespinasse/github-slug-action@v4.x
+      
+      # Use the docker login action to log in to the GitHub Container Registry (ghcr.io).
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Configure AWS credentials to log in to the AWS Container Registry (ECR).
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@13d241b293754004c80624b5567555c4a39ffbe3
+      with:
+        aws-access-key-id: ${{ secrets.DEV_AWS_ID }}
+        aws-secret-access-key: ${{ secrets.DEV_AWS_KEY }}
+        aws-region: ${{ secrets.DEV_AWS_REGION }}
+
+    # Log in to AWS ECR using the configured credentials.
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@aaf69d68aa3fb14c1d5a6be9ac61fe15b48453a2
+    
+    # Build, tag, and push the Odoo image to AWS ECR.
+    - name: Build, tag, and push Odoo image
+      id: build-backend-image
+      env:
+        IMAGE_TAG: ${{ github.sha }}
+        REGISTER_AWS: ${{ secrets.DEV_AWS_ECR_REPO }}
+      run: |
+        cd src/
+        DOCKER_IMAGE=$(cat .env | grep DOCKER_IMAGE | cut -d'=' -f2)
+        docker build -t $REGISTER_AWS:$IMAGE_TAG --build-arg DOCKER_IMAGE=${DOCKER_IMAGE} .
+        docker push $REGISTER_AWS:$IMAGE_TAG
+        docker tag $REGISTER_AWS:$IMAGE_TAG $REGISTER_AWS:dev
+        docker push $REGISTER_AWS:dev
+        echo "::set-output name=image::$REGISTER_AWS:$IMAGE_TAG"
+
+  # Execute the deploy script on the development server using SSH and GitHub secrets.
+  deploy-to-box-dev:
+    name: "Deploy to DEV server"
+    needs: package
+    runs-on: [self-hosted, dev_uat]
+    timeout-minutes: 5
+    steps:
+      - name: Check for reexecution
+        run: |
+          reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+            if [[ $reexecution_attempt -gt 1 ]]; then
+              echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+              exit 1
+            fi
+  # Execute the script that will deploy the source code to the UAT server          
+      - name: Deploy
+        run: |
+          sudo bash ${{ secrets.DEV_DEPLOY_SCRIPT_PATH }} "${{ github.ref }}"

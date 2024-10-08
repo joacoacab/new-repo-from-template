@@ -1,0 +1,44 @@
+on:
+  # Triggered when a push occurs to the master branch or a pull request is created.
+  push:
+    branches:
+      - master
+    # Activated only when the cache-precommit-creator.yml or .pre-commit-config.yaml files are modified.
+    paths:
+      - .github/workflows/cache-precommit-creator.yml
+      - .pre-commit-config.yaml
+
+name: Pre-commits Cache Creation
+
+jobs:
+
+  pre-commit:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      # Step 1: Clone the repository and disable shallow cloning to get the entire commit history.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Step 2: Set up the Python environment.
+      - uses: actions/setup-python@v4
+
+      # Step 3: Get the Python version and store it in the PY environment variable.
+      - name: Get Python version
+        run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> $GITHUB_ENV  
+
+      # Step 4: Use the existing pre-commit cache or create a new one.
+      # This action uses the pre-commit cache based on the Python version and .pre-commit-config.yaml file configuration.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit|${{ env.PY }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+      # Step 5: Install the pre-commit tool.
+      - name: Install pre-commit
+        run: pip install pre-commit      
+
+      # Step 6: Run pre-commit to check the code.
+      - name: Run pre-commit
+        run: pre-commit run

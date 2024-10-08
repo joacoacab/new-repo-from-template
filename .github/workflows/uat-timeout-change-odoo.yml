@@ -1,0 +1,62 @@
+# Workflow to change timeout values on the server
+
+name: UAT - Odoo Timeouts Change
+
+# Define the event that triggers this workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      timeout:
+        description: 'Timeout CPU'
+        required: true
+        default: '120'
+      timeout_real:
+        description: 'Timeout Real'
+        required: true
+        default: '600'
+
+# Jobs to be executed in the workflow
+jobs:
+  # Check if the user running the workflow is authorized and limit the number of execution attempts to one.
+  verify-user-permissions:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+    - name: Verify if the user is allowed to run this workflow
+      run: |
+        ALLOWED_USERS=${{ vars.ALLOWED_USERS }}
+        CURRENT_USER=$GITHUB_ACTOR
+        
+        if [[ ! $ALLOWED_USERS =~ (^|,)${CURRENT_USER}($|,) ]]; then
+          echo "ERROR - You are not allowed to run this workflow."
+          exit 1
+        fi
+        
+        echo "Permissions OK, running workflow..."
+        
+    - name: Verify Reexecution
+      run: |
+        reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+          if [[ $reexecution_attempt -gt 1 ]]; then
+            echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+            exit 1
+          fi
+
+  # Change the server timeout values.
+  timeout-change:
+    needs: [verify-user-permissions]
+    timeout-minutes: 5
+    runs-on: [self-hosted, dev_uat]
+    steps:
+    - name: Verify Reexecution
+      run: |
+        reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+          if [[ $reexecution_attempt -gt 1 ]]; then
+            echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+            exit 1
+          fi
+    # Execute the script to change server timeouts with the obtained parameters.
+    - name: Execute Remote Script
+      run: |
+        sudo bash ${{ secrets.UAT_TIMEOUTS_SCRIPT_PATH }} ${{ github.event.inputs.timeout }} ${{ github.event.inputs.timeout_real }}
+

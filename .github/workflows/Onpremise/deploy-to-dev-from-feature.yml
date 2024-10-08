@@ -1,0 +1,100 @@
+name: DEV - Deploy to DEV server from feature branch
+on:
+  workflow_dispatch: # Allows manual triggering of the workflow
+
+jobs:
+  # Verify if the user running the workflow is authorized to do so and check for reexecution attempts. In this case, only one execution attempt is allowed.
+  verify-user-permissions:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Verify if the user is allowed to run this workflow
+      run: |
+        ALLOWED_USERS=${{ vars.ALLOWED_USERS }} # Getting the allowed users from environment variables
+        CURRENT_USER=$GITHUB_ACTOR # Getting the current user running the workflow
+        
+        if [[ ! $ALLOWED_USERS =~ (^|,)${CURRENT_USER}($|,) ]]; then
+          echo "ERROR - You are not allowed to run this workflow."
+          exit 1
+        fi
+        
+        echo "Permissions OK, running the workflow..."
+
+    - name: Check for reexecution
+      run: |
+        reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+        if [[ $reexecution_attempt -gt 1 ]]; then
+          echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+          exit 1
+        fi
+
+  build:
+    name: "Build DEV artifact"
+    needs: [verify-user-permissions] # Depends on verify-user-permissions job
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+    - name: Check for reexecution
+      run: |
+        reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+        if [[ $reexecution_attempt -gt 1 ]]; then
+          echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+          exit 1
+        fi
+
+    # Show the name of the branch being deployed
+    - name: Show branch name
+      run: echo "******** Deploying from branch ${{ github.ref }} ********"
+    
+    # Checkout the branch entered by the user with submodules using a personal access token  
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        # Use the user's response for the checkout
+        submodules: true
+        # Use the personal access token from the Nybble organization to clone private submodules
+        token: ${{ secrets.ODOO_ADDONS }}
+    
+    # Use inject slug to obtain the repository name and branch name
+    - name: Inject slug/short variables
+      uses: rlespinasse/github-slug-action@v4.x
+    
+    # Create a ZIP file with the repository name and branch name
+    - name: Create DEV RELEASE ZIP file
+      id: create-zip
+      run: |
+        REPO_NAME=$(echo "${{ github.repository }}" | cut -d '/' -f 2)
+        BRANCH_NAME=$(echo "${{ github.ref }}" | cut -d '/' -f 3)
+        FILE_NAME="${REPO_NAME}_feature.zip"
+        zip -r "${FILE_NAME}" src
+        echo "::set-output name=zip_file::${FILE_NAME}"
+        
+    # Upload the ZIP file to GitHub artifacts
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: artifact-dev
+        path: ${{ steps.create-zip.outputs.zip_file }}
+        retention-days: 1
+
+  # Deploy the .zip file created in the previous step to a development server using a self-hosted runner
+  deploy:
+    name: "Deploy to uat server"
+    needs: build
+    runs-on: [self-hosted, uat]
+    timeout-minutes: 8
+    steps:
+      - name: Verify reexecution
+        run: |
+          reexecution_attempt="${{ github.run_attempt }}" # Number of reexecution attempts
+            if [[ $reexecution_attempt -gt 1 ]]; then
+              echo "Error: Reexecution detected. You have to create a new Workflow Dispatch!"
+              exit 1
+            fi
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: artifact-uat
+          path: ${{ secrets.DEV_DEPLOY_ZIP_PATH }}
+      - name: Deploy
+        run: |
+          sudo bash ${{ secrets.DEV_DEPLOY_SCRIPT_PATH }} "${{ github.ref }}"
